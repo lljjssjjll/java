@@ -1,13 +1,26 @@
 package collection;
 
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.TimeValue;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class Practice_LinkedHashMap {
     private static final int SIZE = 500_000;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         demonstratePurpose();
         demonstrateAdvantages();
         demonstrateDisadvantages();
@@ -76,34 +89,57 @@ public class Practice_LinkedHashMap {
     }
 
     // 성능: vs HashMap — put/get 속도 (LinkedHashMap이 포인터 유지 비용으로 미미하게 느림)
-    static void demonstratePerformance() {
+    static void demonstratePerformance() throws Exception {
         System.out.println("=== [성능] LinkedHashMap vs HashMap ===");
+        Options opt = new OptionsBuilder()
+                .include("Practice_LinkedHashMap\\.PerformanceDemonstration")
+                .warmupIterations(2)
+                .measurementIterations(3)
+                .warmupTime(TimeValue.seconds(1))
+                .measurementTime(TimeValue.seconds(1))
+                .forks(1)
+                .build();
+        new Runner(opt).run();
+    }
 
-        HashMap<Integer, Integer> hashMap = new HashMap<>(SIZE * 2);
-        LinkedHashMap<Integer, Integer> linkedMap = new LinkedHashMap<>(SIZE * 2);
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+    @State(Scope.Thread)
+    public static class PerformanceDemonstration {
+        HashMap<Integer, Integer> hashMap;
+        LinkedHashMap<Integer, Integer> linkedMap;
+        int idx;
 
-        // put 비교
-        long start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) hashMap.put(i, i);
-        long hashPut = System.nanoTime() - start;
+        @Setup(Level.Trial)
+        public void setup() {
+            hashMap = new HashMap<>(SIZE * 2);
+            linkedMap = new LinkedHashMap<>(SIZE * 2);
+            for (int i = 0; i < SIZE; i++) { hashMap.put(i, i); linkedMap.put(i, i); }
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) linkedMap.put(i, i);
-        long linkedPut = System.nanoTime() - start;
+        @Setup(Level.Iteration)
+        public void resetIdx() { idx = 0; }
 
-        System.out.printf("put() %,d회 → HashMap: %,d ns  LinkedHashMap: %,d ns%n", SIZE, hashPut, linkedPut);
+        @Benchmark
+        public Integer hashMap_get() {
+            return hashMap.get(idx++ % SIZE);
+        }
 
-        // get 비교
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) hashMap.get(i);
-        long hashGet = System.nanoTime() - start;
+        @Benchmark
+        public Integer linkedHashMap_get() {
+            return linkedMap.get(idx++ % SIZE);
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) linkedMap.get(i);
-        long linkedGet = System.nanoTime() - start;
+        @Benchmark
+        public Integer hashMap_put() {
+            int i = idx++ % SIZE;
+            return hashMap.put(i, i);
+        }
 
-        System.out.printf("get() %,d회 → HashMap: %,d ns  LinkedHashMap: %,d ns%n", SIZE, hashGet, linkedGet);
-        System.out.println("→ 삽입·삭제마다 연결 리스트 포인터 갱신이 추가되어 LinkedHashMap이 미미하게 느림");
-        System.out.println();
+        @Benchmark
+        public Integer linkedHashMap_put() {
+            int i = idx++ % SIZE;
+            return linkedMap.put(i, i);
+        }
     }
 }

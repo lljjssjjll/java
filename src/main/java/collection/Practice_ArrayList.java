@@ -1,13 +1,26 @@
 package collection;
 
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.TimeValue;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class Practice_ArrayList {
     private static final int SIZE = 10_000;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         demonstratePurpose();
         demonstrateAdvantages();
         demonstrateDisadvantages();
@@ -63,9 +76,9 @@ public class Practice_ArrayList {
 
         // 맨 앞 삽입마다 기존 요소 전체 오른쪽 쉬프트 → O(n)
         long start = System.nanoTime();
-        for (int i = 0; i < 1_000; i++) list.add(0, -i);
+        for (int i = 0; i < 100_000; i++) list.add(0, -i);
         long shiftTime = System.nanoTime() - start;
-        System.out.println("맨 앞 삽입 1,000회 (O(n) 쉬프트) : " + shiftTime / 1_000_000 + " ms");
+        System.out.println("맨 앞 삽입 100,000회 (O(n) 쉬프트) : " + shiftTime / 1_000_000 + " ms");
 
         // 초기 용량 없이 삽입 반복 → 내부 배열 재할당 반복 발생
         ArrayList<Integer> growing = new ArrayList<>(1);
@@ -77,37 +90,57 @@ public class Practice_ArrayList {
     }
 
     // 성능: vs LinkedList — 랜덤 접근(ArrayList 우위) / 맨 앞 삽입(LinkedList 우위)
-    static void demonstratePerformance() {
+    static void demonstratePerformance() throws Exception {
         System.out.println("=== [성능] ArrayList vs LinkedList ===");
+        Options opt = new OptionsBuilder()
+                .include("Practice_ArrayList\\.PerformanceDemonstration")
+                .warmupIterations(2)
+                .measurementIterations(3)
+                .warmupTime(TimeValue.seconds(1))
+                .measurementTime(TimeValue.seconds(1))
+                .forks(1)
+                .build();
+        new Runner(opt).run();
+    }
 
-        ArrayList<Integer> al = new ArrayList<>(SIZE);
-        LinkedList<Integer> ll = new LinkedList<>();
-        for (int i = 0; i < SIZE; i++) { al.add(i); ll.add(i); }
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+    @State(Scope.Thread)
+    public static class PerformanceDemonstration {
+        ArrayList<Integer> al;
+        LinkedList<Integer> ll;
+        int idx;
 
-        // 랜덤 접근: ArrayList O(1) vs LinkedList O(n)
-        long start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) al.get(i);
-        long alGet = System.nanoTime() - start;
+        @Setup(Level.Trial)
+        public void setup() {
+            al = new ArrayList<>(SIZE);
+            ll = new LinkedList<>();
+            for (int i = 0; i < SIZE; i++) { al.add(i); ll.add(i); }
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) ll.get(i);
-        long llGet = System.nanoTime() - start;
+        @Setup(Level.Iteration)
+        public void resetIdx() { idx = 0; }
 
-        System.out.printf("랜덤 접근 %,d회  → ArrayList: %,d ns  LinkedList: %,d ns%n", SIZE, alGet, llGet);
+        @Benchmark
+        public int arrayList_get() {
+            return al.get(idx++ % SIZE);
+        }
 
-        // 맨 앞 삽입: ArrayList O(n) 쉬프트 vs LinkedList O(1) 노드 교체
-        ArrayList<Integer> al2 = new ArrayList<>();
-        LinkedList<Integer> ll2 = new LinkedList<>();
+        @Benchmark
+        public int linkedList_get() {
+            return ll.get(idx++ % SIZE);
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < 5_000; i++) al2.add(0, i);
-        long alInsert = System.nanoTime() - start;
+        @Benchmark
+        public void arrayList_addFirst() {
+            al.add(0, idx++);
+            al.remove(al.size() - 1);
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < 5_000; i++) ll2.addFirst(i);
-        long llInsert = System.nanoTime() - start;
-
-        System.out.printf("맨 앞 삽입 5,000회 → ArrayList: %,d ns  LinkedList: %,d ns%n", alInsert, llInsert);
-        System.out.println();
+        @Benchmark
+        public void linkedList_addFirst() {
+            ll.addFirst(idx++);
+            ll.removeLast();
+        }
     }
 }

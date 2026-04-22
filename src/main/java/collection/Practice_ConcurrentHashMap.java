@@ -1,16 +1,29 @@
 package collection;
 
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.TimeValue;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class Practice_ConcurrentHashMap {
     private static final int THREADS = 8;
     private static final int OPS_PER_THREAD = 50_000;
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws Exception {
         demonstratePurpose();
         demonstrateAdvantages();
         demonstrateDisadvantages();
@@ -103,46 +116,61 @@ public class Practice_ConcurrentHashMap {
         System.out.println();
     }
 
-    // 성능: vs Collections.synchronizedMap — 멀티스레드 put 경쟁 비교
-    static void demonstratePerformance() throws InterruptedException {
-        System.out.println("=== [성능] ConcurrentHashMap vs synchronizedMap (멀티스레드) ===");
+    // 성능: vs Collections.synchronizedMap — 단일 스레드 get 비교
+    static void demonstratePerformance() throws Exception {
+        System.out.println("=== [성능] ConcurrentHashMap vs synchronizedMap ===");
+        Options opt = new OptionsBuilder()
+                .include("Practice_ConcurrentHashMap\\.PerformanceDemonstration")
+                .warmupIterations(2)
+                .measurementIterations(3)
+                .warmupTime(TimeValue.seconds(1))
+                .measurementTime(TimeValue.seconds(1))
+                .forks(1)
+                .build();
+        new Runner(opt).run();
+    }
 
-        ConcurrentHashMap<Integer, Integer> chm = new ConcurrentHashMap<>();
-        Map<Integer, Integer> syncMap = Collections.synchronizedMap(new HashMap<>());
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+    @State(Scope.Thread)
+    public static class PerformanceDemonstration {
+        ConcurrentHashMap<Integer, Integer> chm;
+        Map<Integer, Integer> syncMap;
+        int idx;
 
-        // ConcurrentHashMap
-        CountDownLatch latch1 = new CountDownLatch(THREADS);
-        Thread[] t1 = new Thread[THREADS];
-        long start = System.nanoTime();
-        for (int t = 0; t < THREADS; t++) {
-            final int base = t * OPS_PER_THREAD;
-            t1[t] = new Thread(() -> {
-                for (int i = 0; i < OPS_PER_THREAD; i++) chm.put(base + i, i);
-                latch1.countDown();
-            });
-            t1[t].start();
+        @Setup(Level.Trial)
+        public void setup() {
+            chm = new ConcurrentHashMap<>();
+            syncMap = Collections.synchronizedMap(new HashMap<>());
+            for (int i = 0; i < OPS_PER_THREAD; i++) {
+                chm.put(i, i);
+                syncMap.put(i, i);
+            }
         }
-        latch1.await();
-        long chmTime = System.nanoTime() - start;
 
-        // synchronizedMap
-        CountDownLatch latch2 = new CountDownLatch(THREADS);
-        Thread[] t2 = new Thread[THREADS];
-        start = System.nanoTime();
-        for (int t = 0; t < THREADS; t++) {
-            final int base = t * OPS_PER_THREAD;
-            t2[t] = new Thread(() -> {
-                for (int i = 0; i < OPS_PER_THREAD; i++) syncMap.put(base + i, i);
-                latch2.countDown();
-            });
-            t2[t].start();
+        @Setup(Level.Iteration)
+        public void resetIdx() { idx = 0; }
+
+        @Benchmark
+        public Integer concurrentHashMap_get() {
+            return chm.get(idx++ % OPS_PER_THREAD);
         }
-        latch2.await();
-        long syncTime = System.nanoTime() - start;
 
-        System.out.printf("스레드 %d개 × put %,d회 → ConcurrentHashMap: %,d ns  synchronizedMap: %,d ns%n",
-                THREADS, OPS_PER_THREAD, chmTime, syncTime);
-        System.out.println("→ synchronizedMap은 단일 락으로 직렬화 / ConcurrentHashMap은 버킷 단위 병렬 처리");
-        System.out.println();
+        @Benchmark
+        public Integer synchronizedMap_get() {
+            return syncMap.get(idx++ % OPS_PER_THREAD);
+        }
+
+        @Benchmark
+        public Integer concurrentHashMap_put() {
+            int i = idx++ % OPS_PER_THREAD;
+            return chm.put(i, i);
+        }
+
+        @Benchmark
+        public Integer synchronizedMap_put() {
+            int i = idx++ % OPS_PER_THREAD;
+            return syncMap.put(i, i);
+        }
     }
 }

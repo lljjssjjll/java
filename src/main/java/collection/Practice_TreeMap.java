@@ -1,14 +1,27 @@
 package collection;
 
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.TimeValue;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 
 public class Practice_TreeMap {
     private static final int SIZE = 500_000;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         demonstratePurpose();
         demonstrateAdvantages();
         demonstrateDisadvantages();
@@ -77,34 +90,57 @@ public class Practice_TreeMap {
     }
 
     // 성능: vs HashMap — put/get 속도 (HashMap O(1) vs TreeMap O(log n))
-    static void demonstratePerformance() {
+    static void demonstratePerformance() throws Exception {
         System.out.println("=== [성능] TreeMap vs HashMap ===");
+        Options opt = new OptionsBuilder()
+                .include("Practice_TreeMap\\.PerformanceDemonstration")
+                .warmupIterations(2)
+                .measurementIterations(3)
+                .warmupTime(TimeValue.seconds(1))
+                .measurementTime(TimeValue.seconds(1))
+                .forks(1)
+                .build();
+        new Runner(opt).run();
+    }
 
-        TreeMap<Integer, Integer> treeMap = new TreeMap<>();
-        HashMap<Integer, Integer> hashMap = new HashMap<>(SIZE * 2);
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+    @State(Scope.Thread)
+    public static class PerformanceDemonstration {
+        TreeMap<Integer, Integer> treeMap;
+        HashMap<Integer, Integer> hashMap;
+        int idx;
 
-        // put 비교
-        long start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) treeMap.put(i, i);
-        long treePut = System.nanoTime() - start;
+        @Setup(Level.Trial)
+        public void setup() {
+            treeMap = new TreeMap<>();
+            hashMap = new HashMap<>(SIZE * 2);
+            for (int i = 0; i < SIZE; i++) { treeMap.put(i, i); hashMap.put(i, i); }
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) hashMap.put(i, i);
-        long hashPut = System.nanoTime() - start;
+        @Setup(Level.Iteration)
+        public void resetIdx() { idx = 0; }
 
-        System.out.printf("put() %,d회 → TreeMap: %,d ns  HashMap: %,d ns%n", SIZE, treePut, hashPut);
+        @Benchmark
+        public Integer treeMap_get() {
+            return treeMap.get(idx++ % SIZE);
+        }
 
-        // get 비교
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) treeMap.get(i);
-        long treeGet = System.nanoTime() - start;
+        @Benchmark
+        public Integer hashMap_get() {
+            return hashMap.get(idx++ % SIZE);
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) hashMap.get(i);
-        long hashGet = System.nanoTime() - start;
+        @Benchmark
+        public Integer treeMap_put() {
+            int i = idx++ % SIZE;
+            return treeMap.put(i, i);
+        }
 
-        System.out.printf("get() %,d회 → TreeMap: %,d ns  HashMap: %,d ns%n", SIZE, treeGet, hashGet);
-        System.out.println("→ TreeMap은 정렬 유지·범위 연산 필요 시 선택, 단순 조회는 HashMap 우위");
-        System.out.println();
+        @Benchmark
+        public Integer hashMap_put() {
+            int i = idx++ % SIZE;
+            return hashMap.put(i, i);
+        }
     }
 }

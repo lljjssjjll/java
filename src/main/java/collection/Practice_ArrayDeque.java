@@ -1,12 +1,25 @@
 package collection;
 
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.TimeValue;
 import java.util.ArrayDeque;
 import java.util.LinkedList;
+import java.util.concurrent.TimeUnit;
 
 public class Practice_ArrayDeque {
     private static final int SIZE = 500_000;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         demonstratePurpose();
         demonstrateAdvantages();
         demonstrateDisadvantages();
@@ -78,43 +91,58 @@ public class Practice_ArrayDeque {
     }
 
     // 성능: vs LinkedList(Deque) — offer/poll 반복 (ArrayDeque 우위: 캐시 친화 원형 배열)
-    static void demonstratePerformance() {
+    static void demonstratePerformance() throws Exception {
         System.out.println("=== [성능] ArrayDeque vs LinkedList(Deque) ===");
+        Options opt = new OptionsBuilder()
+                .include("Practice_ArrayDeque\\.PerformanceDemonstration")
+                .warmupIterations(2)
+                .measurementIterations(3)
+                .warmupTime(TimeValue.seconds(1))
+                .measurementTime(TimeValue.seconds(1))
+                .forks(1)
+                .build();
+        new Runner(opt).run();
+    }
 
-        ArrayDeque<Integer> arrayDeque = new ArrayDeque<>(SIZE);
-        LinkedList<Integer> linkedDeque = new LinkedList<>();
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+    @State(Scope.Thread)
+    public static class PerformanceDemonstration {
+        ArrayDeque<Integer> arrayDeque;
+        LinkedList<Integer> linkedList;
+        int idx;
 
-        // offer + poll 교차 반복
-        long start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) arrayDeque.offerLast(i);
-        for (int i = 0; i < SIZE; i++) arrayDeque.pollFirst();
-        long arrayTime = System.nanoTime() - start;
+        @Setup(Level.Trial)
+        public void setup() {
+            arrayDeque = new ArrayDeque<>();
+            linkedList = new LinkedList<>();
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) linkedDeque.offerLast(i);
-        for (int i = 0; i < SIZE; i++) linkedDeque.pollFirst();
-        long linkedTime = System.nanoTime() - start;
+        @Setup(Level.Iteration)
+        public void resetIdx() { idx = 0; }
 
-        System.out.printf("offerLast+pollFirst %,d회 → ArrayDeque: %,d ns  LinkedList: %,d ns%n",
-                SIZE, arrayTime, linkedTime);
+        @Benchmark
+        public Integer arrayDeque_offerPoll() {
+            arrayDeque.offerLast(idx++);
+            return arrayDeque.pollFirst();
+        }
 
-        // addFirst + removeFirst
-        ArrayDeque<Integer> ad2 = new ArrayDeque<>(SIZE);
-        LinkedList<Integer> ll2 = new LinkedList<>();
+        @Benchmark
+        public Integer linkedList_offerPoll() {
+            linkedList.offerLast(idx++);
+            return linkedList.pollFirst();
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) ad2.addFirst(i);
-        for (int i = 0; i < SIZE; i++) ad2.removeFirst();
-        long adFirst = System.nanoTime() - start;
+        @Benchmark
+        public void arrayDeque_addFirstRemoveFirst() {
+            arrayDeque.addFirst(idx++);
+            arrayDeque.removeFirst();
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) ll2.addFirst(i);
-        for (int i = 0; i < SIZE; i++) ll2.removeFirst();
-        long llFirst = System.nanoTime() - start;
-
-        System.out.printf("addFirst+removeFirst %,d회 → ArrayDeque: %,d ns  LinkedList: %,d ns%n",
-                SIZE, adFirst, llFirst);
-        System.out.println("→ LinkedList는 노드 객체 할당·GC 비용 / ArrayDeque는 배열 인덱스 이동만");
-        System.out.println();
+        @Benchmark
+        public void linkedList_addFirstRemoveFirst() {
+            linkedList.addFirst(idx++);
+            linkedList.removeFirst();
+        }
     }
 }

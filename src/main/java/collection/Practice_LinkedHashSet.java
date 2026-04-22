@@ -1,13 +1,27 @@
 package collection;
 
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.TimeValue;
+
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class Practice_LinkedHashSet {
     private static final int SIZE = 500_000;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         demonstratePurpose();
         demonstrateAdvantages();
         demonstrateDisadvantages();
@@ -66,34 +80,55 @@ public class Practice_LinkedHashSet {
     }
 
     // 성능: vs HashSet — add/contains 속도 비교 (LinkedHashSet이 미미하게 느림)
-    static void demonstratePerformance() {
+    static void demonstratePerformance() throws Exception {
         System.out.println("=== [성능] LinkedHashSet vs HashSet ===");
+        Options opt = new OptionsBuilder()
+                .include("Practice_LinkedHashSet\\.PerformanceDemonstration")
+                .warmupIterations(2)
+                .measurementIterations(3)
+                .warmupTime(TimeValue.seconds(1))
+                .measurementTime(TimeValue.seconds(1))
+                .forks(1)
+                .build();
+        new Runner(opt).run();
+    }
 
-        HashSet<Integer> hashSet = new HashSet<>(SIZE * 2);
-        LinkedHashSet<Integer> linkedSet = new LinkedHashSet<>(SIZE * 2);
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+    @State(Scope.Thread)
+    public static class PerformanceDemonstration {
+        HashSet<Integer>       hashSet;
+        LinkedHashSet<Integer> linkedSet;
+        int idx;
 
-        // add 비교
-        long start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) hashSet.add(i);
-        long hashAdd = System.nanoTime() - start;
+        @Setup(Level.Trial)
+        public void setup() {
+            hashSet   = new HashSet<>(SIZE * 2);
+            linkedSet = new LinkedHashSet<>(SIZE * 2);
+            for (int i = 0; i < SIZE; i++) { hashSet.add(i); linkedSet.add(i); }
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) linkedSet.add(i);
-        long linkedAdd = System.nanoTime() - start;
+        @Setup(Level.Iteration)
+        public void resetIdx() { idx = 0; }
 
-        System.out.printf("add()       %,d회 → HashSet: %,d ns  LinkedHashSet: %,d ns%n", SIZE, hashAdd, linkedAdd);
+        @Benchmark
+        public boolean hashSet_contains() {
+            return hashSet.contains(idx++ % SIZE);
+        }
 
-        // contains 비교
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) hashSet.contains(i);
-        long hashContains = System.nanoTime() - start;
+        @Benchmark
+        public boolean linkedHashSet_contains() {
+            return linkedSet.contains(idx++ % SIZE);
+        }
 
-        start = System.nanoTime();
-        for (int i = 0; i < SIZE; i++) linkedSet.contains(i);
-        long linkedContains = System.nanoTime() - start;
+        @Benchmark
+        public boolean hashSet_add() {
+            return hashSet.add(idx++ % SIZE);
+        }
 
-        System.out.printf("contains()  %,d회 → HashSet: %,d ns  LinkedHashSet: %,d ns%n", SIZE, hashContains, linkedContains);
-        System.out.println("→ 연결 리스트 포인터 유지 비용으로 LinkedHashSet이 미미하게 느림");
-        System.out.println();
+        @Benchmark
+        public boolean linkedHashSet_add() {
+            return linkedSet.add(idx++ % SIZE);
+        }
     }
 }

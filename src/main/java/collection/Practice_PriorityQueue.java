@@ -1,15 +1,28 @@
 package collection;
 
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.TimeValue;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.TreeSet;
+import java.util.concurrent.TimeUnit;
 
 public class Practice_PriorityQueue {
     private static final int SIZE = 500_000;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         demonstratePurpose();
         demonstrateAdvantages();
         demonstrateDisadvantages();
@@ -87,35 +100,57 @@ public class Practice_PriorityQueue {
     }
 
     // 성능: vs TreeSet — offer/poll 비교 (우선순위 큐 용도)
-    static void demonstratePerformance() {
+    static void demonstratePerformance() throws Exception {
         System.out.println("=== [성능] PriorityQueue vs TreeSet ===");
+        Options opt = new OptionsBuilder()
+                .include("Practice_PriorityQueue\\.PerformanceDemonstration")
+                .warmupIterations(2)
+                .measurementIterations(3)
+                .warmupTime(TimeValue.seconds(1))
+                .measurementTime(TimeValue.seconds(1))
+                .forks(1)
+                .build();
+        new Runner(opt).run();
+    }
 
-        PriorityQueue<Integer> pq = new PriorityQueue<>(SIZE);
-        TreeSet<Integer> ts = new TreeSet<>();
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+    @State(Scope.Thread)
+    public static class PerformanceDemonstration {
+        PriorityQueue<Integer> pq;
+        TreeSet<Integer> ts;
+        int idx;
 
-        // offer(add) 비교
-        long start = System.nanoTime();
-        for (int i = SIZE; i >= 1; i--) pq.offer(i);
-        long pqOffer = System.nanoTime() - start;
+        @Setup(Level.Trial)
+        public void setup() {
+            pq = new PriorityQueue<>(SIZE);
+            ts = new TreeSet<>();
+            for (int i = SIZE; i >= 1; i--) { pq.offer(i); ts.add(i); }
+        }
 
-        start = System.nanoTime();
-        for (int i = SIZE; i >= 1; i--) ts.add(i);
-        long tsAdd = System.nanoTime() - start;
+        @Setup(Level.Iteration)
+        public void resetIdx() { idx = 0; }
 
-        System.out.printf("offer/add() %,d회 → PriorityQueue: %,d ns  TreeSet: %,d ns%n", SIZE, pqOffer, tsAdd);
+        @Benchmark
+        public boolean priorityQueue_offer() {
+            return pq.offer(idx++);
+        }
 
-        // poll(pollFirst) 비교
-        start = System.nanoTime();
-        while (!pq.isEmpty()) pq.poll();
-        long pqPoll = System.nanoTime() - start;
+        @Benchmark
+        public boolean treeSet_add() {
+            return ts.add(idx++);
+        }
 
-        start = System.nanoTime();
-        while (!ts.isEmpty()) ts.pollFirst();
-        long tsPoll = System.nanoTime() - start;
+        @Benchmark
+        public Integer priorityQueue_poll() {
+            if (pq.isEmpty()) for (int i = SIZE; i >= 1; i--) pq.offer(i);
+            return pq.poll();
+        }
 
-        System.out.printf("poll()      %,d회 → PriorityQueue: %,d ns  TreeSet: %,d ns%n", SIZE, pqPoll, tsPoll);
-        System.out.println("→ PriorityQueue는 이진 힙(배열 기반) / TreeSet은 Red-Black Tree(노드 기반)");
-        System.out.println("→ 단순 최솟값 반복 추출 용도에서는 PriorityQueue가 캐시 효율 면에서 유리");
-        System.out.println();
+        @Benchmark
+        public Integer treeSet_poll() {
+            if (ts.isEmpty()) for (int i = SIZE; i >= 1; i--) ts.add(i);
+            return ts.pollFirst();
+        }
     }
 }
