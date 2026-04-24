@@ -17,7 +17,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import org.openjdk.jmh.annotations.Threads;
 
 public class Practice_ConcurrentHashMap {
     private static final int THREADS = 8;
@@ -116,13 +118,13 @@ public class Practice_ConcurrentHashMap {
         System.out.println();
     }
 
-    // 성능: vs Collections.synchronizedMap — 단일 스레드 get 비교
+    // 성능: HashMap(단일) vs ConcurrentHashMap(단일) / SynchronizedMap(멀티 8개 스레드) vs ConcurrentHashMap(멀티 8개 스레드)
     static void demonstratePerformance() throws Exception {
-        System.out.println("=== [성능] ConcurrentHashMap vs synchronizedMap ===");
+        System.out.println("=== [성능] ConcurrentHashMap vs synchronizedMap (멀티스레드) ===");
         Options opt = new OptionsBuilder()
-                .include("Practice_ConcurrentHashMap\\.PerformanceDemonstration")
+                .include("Practice_ConcurrentHashMap\\..*Benchmark")
                 .warmupIterations(2)
-                .measurementIterations(3)
+                .measurementIterations(2)
                 .warmupTime(TimeValue.seconds(1))
                 .measurementTime(TimeValue.seconds(1))
                 .forks(1)
@@ -130,21 +132,63 @@ public class Practice_ConcurrentHashMap {
         new Runner(opt).run();
     }
 
-    @BenchmarkMode(Mode.AverageTime)
-    @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    @State(Scope.Thread)
-    public static class PerformanceDemonstration {
+    @BenchmarkMode(Mode.Throughput)
+    @OutputTimeUnit(TimeUnit.SECONDS)
+    @State(Scope.Benchmark)
+    public static class ConcurrentBenchmark {
         ConcurrentHashMap<Integer, Integer> chm;
         Map<Integer, Integer> syncMap;
-        int idx;
 
         @Setup(Level.Trial)
         public void setup() {
             chm = new ConcurrentHashMap<>();
             syncMap = Collections.synchronizedMap(new HashMap<>());
-            for (int i = 0; i < OPS_PER_THREAD; i++) {
+            for (int i = 0; i < 10_000; i++) {
                 chm.put(i, i);
                 syncMap.put(i, i);
+            }
+        }
+
+        @Benchmark
+        @Threads(8)
+        public void concurrentHashMap_concurrent_put() {
+            chm.put(ThreadLocalRandom.current().nextInt(10_000), 1);
+        }
+
+        @Benchmark
+        @Threads(8)
+        public void synchronizedMap_concurrent_put() {
+            syncMap.put(ThreadLocalRandom.current().nextInt(10_000), 1);
+        }
+
+        @Benchmark
+        @Threads(8)
+        public Integer concurrentHashMap_concurrent_get() {
+            return chm.get(ThreadLocalRandom.current().nextInt(10_000));
+        }
+
+        @Benchmark
+        @Threads(8)
+        public Integer synchronizedMap_concurrent_get() {
+            return syncMap.get(ThreadLocalRandom.current().nextInt(10_000));
+        }
+    }
+
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
+    @State(Scope.Thread)
+    public static class SingleThreadBenchmark {
+        ConcurrentHashMap<Integer, Integer> chm;
+        HashMap<Integer, Integer> hm;
+        int idx;
+
+        @Setup(Level.Trial)
+        public void setup() {
+            chm = new ConcurrentHashMap<>();
+            hm = new HashMap<>();
+            for (int i = 0; i < OPS_PER_THREAD; i++) {
+                chm.put(i, i);
+                hm.put(i, i);
             }
         }
 
@@ -157,8 +201,8 @@ public class Practice_ConcurrentHashMap {
         }
 
         @Benchmark
-        public Integer synchronizedMap_get() {
-            return syncMap.get(idx++ % OPS_PER_THREAD);
+        public Integer hashMap_get() {
+            return hm.get(idx++ % OPS_PER_THREAD);
         }
 
         @Benchmark
@@ -168,9 +212,9 @@ public class Practice_ConcurrentHashMap {
         }
 
         @Benchmark
-        public Integer synchronizedMap_put() {
+        public Integer hashMap_put() {
             int i = idx++ % OPS_PER_THREAD;
-            return syncMap.put(i, i);
+            return hm.put(i, i);
         }
     }
 }
