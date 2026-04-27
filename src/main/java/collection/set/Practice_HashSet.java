@@ -1,4 +1,4 @@
-package collection;
+package collection.set;
 
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
